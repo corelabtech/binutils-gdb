@@ -428,11 +428,8 @@ Contents of the .* section:
   DW_CFA_offset_extended_sf: r6052 \(tinfo\) at cfa\+7824
   DW_CFA_offset_extended_sf: r6053 \(tcontrol\) at cfa\+7828
   DW_CFA_offset_extended_sf: r5800 \(hcontext\) at cfa\+6816
-  DW_CFA_offset_extended_sf: r5544 \(scontext\) at cfa\+5792
   DW_CFA_offset_extended_sf: r6056 \(mcontext\) at cfa\+7840
-  DW_CFA_offset_extended_sf: r6058 \(mscontext\) at cfa\+7848
-  DW_CFA_offset_extended_sf: r6049 \(tdata1\) at cfa\+7812
-  DW_CFA_offset_extended_sf: r6049 \(tdata1\) at cfa\+7812
+  DW_CFA_offset_extended_sf: r6058 \(scontext\) at cfa\+7848
   DW_CFA_offset_extended_sf: r6049 \(tdata1\) at cfa\+7812
   DW_CFA_offset_extended_sf: r6049 \(tdata1\) at cfa\+7812
   DW_CFA_offset_extended_sf: r6049 \(tdata1\) at cfa\+7812

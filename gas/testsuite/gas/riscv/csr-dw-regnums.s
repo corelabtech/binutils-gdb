@@ -432,15 +432,12 @@ _start:
 	.cfi_offset tinfo, 7824
 	.cfi_offset tcontrol, 7828
 	.cfi_offset hcontext, 6816
-	.cfi_offset scontext, 5792
 	.cfi_offset mcontext, 7840
-	.cfi_offset mscontext, 7848
+	.cfi_offset scontext, 7848
 	.cfi_offset mcontrol, 7812	# aliases
-	.cfi_offset mcontrol6, 7812	# aliases
 	.cfi_offset icount, 7812	# aliases
 	.cfi_offset itrigger, 7812	# aliases
 	.cfi_offset etrigger, 7812	# aliases
-	.cfi_offset tmexttrigger, 7812	# aliases
 	.cfi_offset textra32, 7820	# aliases
 	.cfi_offset textra64, 7820	# aliases
 	.cfi_offset seed, 84

@@ -505,15 +505,12 @@
 	csr tinfo
 	csr tcontrol
 	csr hcontext
-	csr scontext
 	csr mcontext
-	csr mscontext
+	csr scontext
 	csr mcontrol		# 0x7a1, alias to tdata1
-	csr mcontrol6		# 0x7a1, alias to tdata1
 	csr icount		# 0x7a1, alias to tdata1
 	csr itrigger		# 0x7a1, alias to tdata1
 	csr etrigger		# 0x7a1, alias to tdata1
-	csr tmexttrigger	# 0x7a1, alias to tdata1
 	csr textra32		# 0x7a3, alias to tdata3
 	csr textra64		# 0x7a3, alias to tdata3
 

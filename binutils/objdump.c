@@ -117,7 +117,7 @@ static bool disassemble_all;		/* -D */
 static int disassemble_zeroes;		/* --disassemble-zeroes */
 static bool formats_info;		/* -i */
 int wide_output;			/* -w */
-static int insn_width;			/* --insn-width */
+static int insn_width = 4;		/* --insn-width */
 static bfd_vma start_address = (bfd_vma) -1; /* --start-address */
 static bfd_vma stop_address = (bfd_vma) -1;  /* --stop-address */
 static int dump_debugging;		/* --debugging */
@@ -3409,7 +3409,7 @@ disassemble_bytes (struct disassemble_info *inf,
 		*s = ' ';
 	      if (*s == '\0')
 		*--s = '0';
-	      printf ("%s:\t", buf + skip_addr_chars);
+              printf ("%s:    ", buf + skip_addr_chars);
 	    }
 	  else
 	    {
@@ -3550,6 +3550,7 @@ disassemble_bytes (struct disassemble_info *inf,
 	      : show_raw_insn >= 0)
 	    {
 	      bfd_vma j;
+              unsigned int total_spaces = 0;
 
 	      /* If ! prefix_addresses and ! wide_output, we print
 		 octets_per_line octets per line.  */
@@ -3579,24 +3580,22 @@ disassemble_bytes (struct disassemble_info *inf,
 			  for (k = 0; k < bpc; k++)
 			    printf ("%02x", (unsigned) data[j + k]);
 			}
+                      total_spaces += 2 *bpc;
 		    }
-		  putchar (' ');
+                  if (j + bpc < addr_offset * opb + pb)
+                  {
+                      putchar (' ');
+                      total_spaces++;
+                  }
 		}
 
-	      for (; pb < octets_per_line; pb += bpc)
+	      for (; total_spaces < 2 * octets_per_line; total_spaces++)
 		{
-		  unsigned int k;
-
-		  for (k = 0; k < bpc; k++)
-		    printf ("  ");
 		  putchar (' ');
 		}
 
 	      /* Separate raw data from instruction by extra space.  */
-	      if (insns)
-		putchar ('\t');
-	      else
-		printf ("    ");
+              printf ("    \t");
 	    }
 
 	  if (! insns)

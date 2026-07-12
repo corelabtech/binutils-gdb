@@ -103,6 +103,7 @@ enum riscv_csr_class
   CSR_CLASS_SSTC_32,		/* Sstc RV32 only */
   CSR_CLASS_SSTC_AND_H_32,	/* Sstc RV32 only (with H) */
   CSR_CLASS_XTHEADVECTOR,	/* xtheadvector only */
+  CSR_CLASS_P,                  /* rvp only */
 };
 
 /* This structure holds all restricted conditions for a CSR.  */
@@ -1155,6 +1156,10 @@ riscv_csr_address (const char *csr_name,
     case CSR_CLASS_XTHEADVECTOR:
       extension = "xtheadvector";
       break;
+    case CSR_CLASS_P:
+      need_check_version = true;
+      extension = "zpn";
+      break;
     default:
       as_bad (_("internal: bad RISC-V CSR class (0x%x)"), csr_class);
     }
@@ -1295,6 +1300,28 @@ flt_lookup (float f, const float *array, size_t size, unsigned *regnop)
       }
 
   return false;
+}
+
+#define RVP_MAX_KEYWORD_LEN 32
+
+static bfd_boolean parse_rvp_field(const char **str, char name[RVP_MAX_KEYWORD_LEN])
+{
+    char *p = name;
+    const char *str_t;
+
+    str_t = *str;
+    str_t--;
+    while (ISALNUM(*str_t) || *str_t == '.' || *str_t == '_')
+      *p++ = *str_t++;
+    *p = '\0';
+
+    if (strncmp(name, "nds_", 4) == 0)
+      {
+       *str = str_t;
+       return TRUE;
+      }
+    else
+      return FALSE;
 }
 
 /* Map ra and s-register to [4,15], so that we can check if the
@@ -1465,6 +1492,7 @@ validate_riscv_insn (const struct riscv_opcode *opc, int length)
   insn_t used_bits = opc->mask;
   int insn_width;
   insn_t required_bits;
+  char c;
 
   if (length == 0)
     length = riscv_insn_length (opc->match);
@@ -1485,10 +1513,10 @@ validate_riscv_insn (const struct riscv_opcode *opc, int length)
   for (oparg = opc->args; *oparg; ++oparg)
     {
       opargStart = oparg;
-      switch (*oparg)
+      switch (c = *oparg)
 	{
 	case 'C': /* RVC */
-	  switch (*++oparg)
+	  switch (c = *++oparg)
 	    {
 	    case 'U': break; /* CRS1, constrained to equal RD.  */
 	    case 'c': break; /* CRS1, constrained to equal sp.  */
@@ -1531,6 +1559,41 @@ validate_riscv_insn (const struct riscv_opcode *opc, int length)
 		  goto unknown_validate_operand;
 		}
 	      break;
+            case 'Z': /* Zcb extension operators.  */
+              switch (*++oparg)
+                {
+                /* sreg operators in cm.mvsa01 and cm.mva01s. */
+                case '1':
+                    USE_BITS(OP_MASK_SREG1, OP_SH_SREG1);
+                    break;
+                case '2':
+                    USE_BITS(OP_MASK_SREG2, OP_SH_SREG2);
+                    break;
+                /* byte immediate operators, load/store byte insns.  */
+                case 'h':
+                    used_bits |= ENCODE_ZCB_HALFWORD_UIMM(-1U);
+                    break;
+                /* halfword immediate operators, load/store halfword insns.  */
+                case 'b':
+                    used_bits |= ENCODE_ZCB_BYTE_UIMM(-1U);
+                    break;
+                /* immediate offset operand for cm.push and cm.pop.  */
+                case 'p':
+                    used_bits |= ENCODE_ZCMP_SPIMM(-1U);
+                    break;
+                /* register list operand for cm.push and cm.pop. */
+                case 'r':
+                    USE_BITS(OP_MASK_RLIST, OP_SH_RLIST);
+                    break;
+                /* table jump index operand.  */
+                case 'i':
+                case 'I':
+                    used_bits |= ENCODE_ZCMP_TABLE_JUMP_INDEX(-1U);
+                    break;
+                default:
+                    goto unknown_validate_operand;
+                }
+                break;
 	    default:
 	      goto unknown_validate_operand;
 	    }
@@ -1541,6 +1604,7 @@ validate_riscv_insn (const struct riscv_opcode *opc, int length)
 	    case 'd':
 	    case 'f': USE_BITS (OP_MASK_VD, OP_SH_VD); break;
 	    case 'e': USE_BITS (OP_MASK_VWD, OP_SH_VWD); break;
+            case 'r': USE_BITS(OP_MASK_VS3, OP_SH_VS3); break;
 	    case 's': USE_BITS (OP_MASK_VS1, OP_SH_VS1); break;
 	    case 't': USE_BITS (OP_MASK_VS2, OP_SH_VS2); break;
 	    case 'u': USE_BITS (OP_MASK_VS1, OP_SH_VS1);
@@ -1549,6 +1613,7 @@ validate_riscv_insn (const struct riscv_opcode *opc, int length)
 		      USE_BITS (OP_MASK_VS1, OP_SH_VS1);
 		      USE_BITS (OP_MASK_VS2, OP_SH_VS2); break;
 	    case '0': break;
+            case '2': USE_BITS(OP_MASK_VCRS2, OP_SH_VCRS2); break;
 	    case 'b': used_bits |= ENCODE_RVV_VB_IMM (-1U); break;
 	    case 'c': used_bits |= ENCODE_RVV_VC_IMM (-1U); break;
 	    case 'i':
@@ -1567,6 +1632,7 @@ validate_riscv_insn (const struct riscv_opcode *opc, int length)
 	case ')': break;
 	case '{': break;
 	case '}': break;
+        case '!': break;
 	case '<': USE_BITS (OP_MASK_SHAMTW, OP_SH_SHAMTW); break;
 	case '>': USE_BITS (OP_MASK_SHAMT, OP_SH_SHAMT); break;
 	case 'A': break; /* Macro operand, must be symbol.  */
@@ -1580,6 +1646,7 @@ validate_riscv_insn (const struct riscv_opcode *opc, int length)
 	case 'Z': /* RS1, CSR number.  */
 	case 'S': /* RS1, floating point.  */
 	case 's': USE_BITS (OP_MASK_RS1, OP_SH_RS1); break;
+        case 'g': /* RS1 and RS2 are the same. */
 	case 'U': /* RS1 and RS2 are the same, floating point.  */
 	  USE_BITS (OP_MASK_RS1, OP_SH_RS1);
 	  /* Fall through.  */
@@ -1592,6 +1659,7 @@ validate_riscv_insn (const struct riscv_opcode *opc, int length)
 	case 'P': USE_BITS (OP_MASK_PRED, OP_SH_PRED); break;
 	case 'Q': USE_BITS (OP_MASK_SUCC, OP_SH_SUCC); break;
 	case 'o': /* ITYPE immediate, load displacement.  */
+        case 'l': /* IMM6L */
 	case 'j': used_bits |= ENCODE_ITYPE_IMM (-1U); break;
 	case 'a': used_bits |= ENCODE_JTYPE_IMM (-1U); break;
 	case 'p': used_bits |= ENCODE_BTYPE_IMM (-1U); break;
@@ -1621,6 +1689,38 @@ validate_riscv_insn (const struct riscv_opcode *opc, int length)
 	      goto unknown_validate_operand;
 	    }
 	  break;
+        case 'n':
+        {
+          char field_name[RVP_MAX_KEYWORD_LEN];
+          oparg++;
+          if (parse_rvp_field(&oparg, field_name))
+          {
+            if (strcmp(field_name, "nds_rdp") == 0)
+              USE_BITS(OP_MASK_RD, OP_SH_RD);
+            else if (strcmp(field_name, "nds_rsp") == 0)
+              USE_BITS(OP_MASK_RD, OP_SH_RS1);
+            else if (strcmp(field_name, "nds_rtp") == 0)
+              USE_BITS(OP_MASK_RD, OP_SH_RS2);
+            else if (strcmp(field_name, "nds_i3u") == 0)
+              used_bits |= ENCODE_PTYPE_IMM3U(-1U);
+            else if (strcmp(field_name, "nds_i4u") == 0)
+              used_bits |= ENCODE_PTYPE_IMM4U(-1U);
+            else if (strcmp(field_name, "nds_i5u") == 0)
+              used_bits |= ENCODE_PTYPE_IMM5U(-1U);
+            else if (strcmp(field_name, "nds_i6u") == 0)
+              used_bits |= ENCODE_PTYPE_IMM6U(-1U);
+            else
+              as_bad(_("internal: bad RISC-V opcode "
+                       "(unknown operand type `%s'): %s %s"),
+                     field_name, opc->name, opc->args);
+          }
+          else
+            as_bad(_("internal: bad RISC-V opcode "
+                     "(unknown operand type `%c'): %s %s"),
+                   c, opc->name, opc->args);
+          oparg--;
+        }
+        break;
 	case 'W': /* Various operands for standard z extensions.  */
 	  switch (*++oparg)
 	    {
@@ -2900,7 +3000,10 @@ riscv_ip (char *str, struct riscv_cl_insn *ip, expressionS *imm_expr,
 					 ? ip->insn_opcode
 					 : insn->match) == 2
 		      && !riscv_opts.rvc)
+                  {
+                    error.msg = _("illegal operands .option norvc is specified");
 		    break;
+                  }
 
 		  if (riscv_is_priv_insn (ip->insn_opcode))
 		    explicit_priv_attr = true;
@@ -3235,6 +3338,88 @@ riscv_ip (char *str, struct riscv_cl_insn *ip, expressionS *imm_expr,
 			goto unknown_riscv_ip_operand;
 		    }
 		  break;
+                case 'Z': /* Zcb extension.  */
+                  switch (*++oparg)
+                  {
+                  case 'h': /* immediate field for c.lh/c.lhu/c.sh.  */
+                      /* handle cases, such as c.sh rs2', (rs1') */
+                    if (riscv_handle_implicit_zero_offset (imm_expr, asarg))
+                      continue;
+                    if (my_getSmallExpression (imm_expr, imm_reloc, asarg, p)
+                                            || imm_expr->X_op != O_constant
+                                            || !VALID_ZCB_HALFWORD_UIMM ((valueT) imm_expr->X_add_number))
+                      break;
+                    ip->insn_opcode |= ENCODE_ZCB_HALFWORD_UIMM (imm_expr->X_add_number);
+                    goto rvc_imm_done;
+                  case 'b': /* immediate field for c.lbu/c.sb.  */
+                    /* handle cases, such as c.lbu rd', (rs1') */
+                    if (riscv_handle_implicit_zero_offset (imm_expr, asarg))
+                      continue;
+                    if (my_getSmallExpression (imm_expr, imm_reloc, asarg, p)
+                                            || imm_expr->X_op != O_constant
+                                            || !VALID_ZCB_BYTE_UIMM ((valueT) imm_expr->X_add_number))
+                      break;
+                    ip->insn_opcode |= ENCODE_ZCB_BYTE_UIMM (imm_expr->X_add_number);
+                    goto rvc_imm_done;
+                  case '1':
+                    if (!reg_lookup (&asarg, RCLASS_GPR, &regno)
+                                  || !RISCV_SREG_0_7 (regno))
+                      break;
+                    INSERT_OPERAND (SREG1, *ip, regno % 8);
+                    continue;
+                  case '2':
+                    if (!reg_lookup (&asarg, RCLASS_GPR, &regno)
+                                  || !RISCV_SREG_0_7 (regno))
+                      break;
+                    INSERT_OPERAND (SREG2, *ip, regno % 8);
+                      continue;
+                  case 'I': /* index operand of cm.jt. The range is from 0 to 63. */
+                    my_getExpression (imm_expr, asarg);
+                    if (imm_expr->X_op != O_constant
+                      || imm_expr->X_add_number < 0
+                      || imm_expr->X_add_number > 31)
+                    {
+                      as_bad ("bad index value for cm.jt, range: [0, 31]");
+                      break;
+                    }
+                    ip->insn_opcode |= ENCODE_ZCMP_TABLE_JUMP_INDEX (imm_expr->X_add_number);
+                    goto rvc_imm_done;
+                  case 'i': /* index operand of cm.jalt. The range is from 64 to 255. */
+                    my_getExpression (imm_expr, asarg);
+                    if (imm_expr->X_op != O_constant
+                      || imm_expr->X_add_number < 32
+                      || imm_expr->X_add_number > 255)
+                    {
+                      as_bad ("bad index value for cm.jalt, range: [32, 255]");
+                      break;
+                    }
+                    ip->insn_opcode |= ENCODE_ZCMP_TABLE_JUMP_INDEX (imm_expr->X_add_number);
+                    goto rvc_imm_done;
+                  case 'r':
+                    /* we use regno to store reglist value here.  */
+                    if (!reglist_lookup (&asarg, &regno))
+                      break;
+                    INSERT_OPERAND (RLIST, *ip, regno);
+                    continue;
+                  case 'p':
+                    if (my_getSmallExpression (imm_expr, imm_reloc, asarg, p)
+                        || imm_expr->X_op != O_constant)
+                      break;
+                    /* convert stack adjust of cm.push to a positive offset. */
+                    if (ip->insn_mo->match == MATCH_CM_PUSH)
+                        imm_expr->X_add_number *= -1;
+                    /* subtract base stack adjust. */
+                    imm_expr->X_add_number -=
+                        riscv_get_base_spimm (ip->insn_opcode, &riscv_rps_as);
+                    if (!VALID_ZCMP_SPIMM (imm_expr->X_add_number))
+                      break;
+                    ip->insn_opcode |=
+                        ENCODE_ZCMP_SPIMM (imm_expr->X_add_number);
+                    goto rvc_imm_done;
+                  default:
+                    goto unknown_riscv_ip_operand;
+                  }
+                  break;
 
 		default:
 		  goto unknown_riscv_ip_operand;
@@ -3486,6 +3671,16 @@ riscv_ip (char *str, struct riscv_cl_insn *ip, expressionS *imm_expr,
 		}
 	      continue;
 
+            case 'l':
+              my_getExpression(imm_expr, asarg);
+              if (imm_expr->X_op != O_constant || imm_expr->X_add_number >= xlen ||
+                imm_expr->X_add_number < 0)
+                break;
+              ip->insn_opcode |= ENCODE_ITYPE_IMM6L(imm_expr->X_add_number);
+              asarg          = expr_parse_end;
+              imm_expr->X_op = O_absent;
+              continue;
+
 	    case 'm': /* Rounding mode.  */
 	      if (arg_lookup (&asarg, riscv_rm,
 			      ARRAY_SIZE (riscv_rm), &regno))
@@ -3494,6 +3689,101 @@ riscv_ip (char *str, struct riscv_cl_insn *ip, expressionS *imm_expr,
 		  continue;
 		}
 	      break;
+
+            case 'n':
+            {
+              char field_name[RVP_MAX_KEYWORD_LEN];
+              oparg++;
+              if (parse_rvp_field(&oparg, field_name))
+              {
+                if (strcmp(field_name, "nds_rdp") == 0 &&
+                    reg_lookup(&asarg, RCLASS_GPR, &regno))
+                {
+                  if (xlen == 32 && (regno % 2) != 0)
+                  {
+                    as_bad(_("the number of Rd must be even "
+                             "(limitation of register pair)"));
+                    break;
+                  }
+                  INSERT_OPERAND(RD, *ip, regno);
+                  oparg--;
+                  continue;
+                }
+                else if (strcmp(field_name, "nds_rsp") == 0 &&
+                         reg_lookup(&asarg, RCLASS_GPR, &regno))
+                {
+                  if (xlen == 32 && (regno % 2) != 0)
+                  {
+                    as_bad(_("the number of Rs1 must be even "
+                             "(limitation of register pair)"));
+                    break;
+                  }
+                  INSERT_OPERAND(RS1, *ip, regno);
+                  oparg--;
+                  continue;
+                }
+                else if (strcmp(field_name, "nds_rtp") == 0 &&
+                         reg_lookup(&asarg, RCLASS_GPR, &regno))
+                {
+                  if (xlen == 32 && (regno % 2) != 0)
+                  {
+                    as_bad(_("the number of Rs2 must be even "
+                             "(limitation of register pair)"));
+                    break;
+                  }
+                  INSERT_OPERAND(RS2, *ip, regno);
+                  oparg--;
+                  continue;
+                }
+
+                my_getExpression(imm_expr, asarg);
+
+                unsigned int maxlen = 0;
+                if (strcmp(field_name, "nds_i3u") == 0 &&
+                    VALID_PTYPE_IMM3U(imm_expr->X_add_number))
+                {
+                    ip->insn_opcode |= ENCODE_PTYPE_IMM3U(imm_expr->X_add_number);
+                    maxlen = 7;
+                }
+                else if (strcmp(field_name, "nds_i4u") == 0 &&
+                         VALID_PTYPE_IMM4U(imm_expr->X_add_number))
+                {
+                    ip->insn_opcode |= ENCODE_PTYPE_IMM4U(imm_expr->X_add_number);
+                    maxlen = 15;
+                }
+                else if (strcmp(field_name, "nds_i5u") == 0 &&
+                         VALID_PTYPE_IMM5U(imm_expr->X_add_number))
+                {
+                    ip->insn_opcode |= ENCODE_PTYPE_IMM5U(imm_expr->X_add_number);
+                    maxlen = 31;
+                }
+                else if (strcmp(field_name, "nds_i6u") == 0 &&
+                         VALID_PTYPE_IMM6U(imm_expr->X_add_number))
+                {
+                    ip->insn_opcode |= ENCODE_PTYPE_IMM6U(imm_expr->X_add_number);
+                    maxlen = 63;
+                }
+                else
+                    break;
+
+                if (imm_expr->X_op != O_constant || imm_expr->X_add_number > maxlen ||
+                    imm_expr->X_add_number < 0)
+                {
+                    break;
+                }
+
+                asarg          = expr_parse_end;
+                imm_expr->X_op = O_absent;
+                oparg--;
+                continue;
+              }
+              else
+              {
+                as_bad(_("internal: bad RISC-V opcode "
+                       "(unknown operand arg `%s')"), oparg);
+              }
+              break;
+            }
 
 	    case 'P':
 	    case 'Q': /* Fence predecessor/successor.  */
@@ -3510,6 +3800,7 @@ riscv_ip (char *str, struct riscv_cl_insn *ip, expressionS *imm_expr,
 
 	    case 'd': /* Destination register.  */
 	    case 's': /* Source register.  */
+            case 'g': /* RS1 and RS2. */
 	    case 't': /* Target register.  */
 	    case 'r': /* RS3 */
 	      if (reg_lookup (&asarg, RCLASS_GPR, &regno))
@@ -3528,6 +3819,7 @@ riscv_ip (char *str, struct riscv_cl_insn *ip, expressionS *imm_expr,
 		    case 'd':
 		      INSERT_OPERAND (RD, *ip, regno);
 		      break;
+                    case 'g': INSERT_OPERAND(RS1, *ip, regno); /* Fall through */
 		    case 't':
 		      INSERT_OPERAND (RS2, *ip, regno);
 		      break;
