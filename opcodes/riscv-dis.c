@@ -80,6 +80,9 @@ static const char (*riscv_fpr_names)[NRC];
 /* If set, disassemble as most general instruction.  */
 static bool no_aliases = false;
 
+/* If set, disassemble numeric register names instead of ABI names.  */
+static int numeric;
+
 /* If set, disassemble without checking architectire string, just like what
    we did at the beginning.  */
 static bool all_ext = false;
@@ -92,6 +95,7 @@ set_default_riscv_dis_options (void)
   riscv_gpr_names = riscv_gpr_names_abi;
   riscv_fpr_names = riscv_fpr_names_abi;
   no_aliases = false;
+  numeric = 0;
 }
 
 /* Parse RISC-V disassembler option (without arguments).  */
@@ -105,6 +109,7 @@ parse_riscv_dis_option_without_args (const char *option)
     {
       riscv_gpr_names = riscv_gpr_names_numeric;
       riscv_fpr_names = riscv_fpr_names_numeric;
+      numeric = 1;
     }
   else if (strcmp (option, "max") == 0)
     all_ext = true;
@@ -225,6 +230,29 @@ maybe_print_address (struct riscv_private_data *pd, int base_reg, int offset,
     pd->print_addr = (bfd_vma)(uint32_t)pd->print_addr;
 }
 
+#define RVP_MAX_KEYWORD_LEN 32
+
+static bool
+parse_rvp_field (const char **str, char name[RVP_MAX_KEYWORD_LEN])
+{
+  char *p = name;
+  const char *str_t;
+
+  str_t = *str;
+  str_t--;
+  while (isalnum (*str_t) || *str_t == '.' || *str_t == '_')
+    *p++ = *str_t++;
+  *p = '\0';
+
+  if (strncmp (name, "nds_", 4) == 0)
+    {
+      *str = str_t;
+      return true;
+    }
+  else
+    return false;
+}
+
 /* Get Zcmp reg_list field.  */
 
 static void
@@ -304,7 +332,7 @@ riscv_zcmp_get_sregno (unsigned sreg_idx)
 /* Print insn arguments for 32/64-bit code.  */
 
 static void
-print_insn_args (const char *oparg, insn_t l, bfd_vma pc, disassemble_info *info)
+print_insn_args (const char *oparg, const char *opname, insn_t l, bfd_vma pc, disassemble_info *info)
 {
   struct riscv_private_data *pd = info->private_data;
   int rs1 = (l >> OP_SH_RS1) & OP_MASK_RS1;
@@ -313,7 +341,19 @@ print_insn_args (const char *oparg, insn_t l, bfd_vma pc, disassemble_info *info
   const char *opargStart;
 
   if (*oparg != '\0')
-    print (info->stream, dis_style_text, "\t");
+  {
+    if (bfd_arch_riscv == info->arch)
+    {
+      const int max_insn_spaces = 13;
+      for (int i = strlen(opname); i < max_insn_spaces - 1; i++)
+      {
+        print (info->stream, dis_style_text, " ");
+      }
+      print (info->stream, dis_style_text, " \t");
+    }
+    else
+      print (info->stream, dis_style_text, "\t");
+  }
 
   for (; *oparg != '\0'; oparg++)
     {
@@ -517,6 +557,7 @@ print_insn_args (const char *oparg, insn_t l, bfd_vma pc, disassemble_info *info
 	    print (info->stream, dis_style_immediate, "0");
 	  break;
 
+        case 'g':
 	case 's':
 	  if ((l & MASK_JALR) == MATCH_JALR)
 	    maybe_print_address (pd, rs1, EXTRACT_ITYPE_IMM (l), 0);
@@ -526,6 +567,11 @@ print_insn_args (const char *oparg, insn_t l, bfd_vma pc, disassemble_info *info
 	case 't':
 	  print (info->stream, dis_style_register, "%s",
 		 riscv_gpr_names[EXTRACT_OPERAND (RS2, l)]);
+	  break;
+
+        case 'r':
+	  print (info->stream, dis_style_register, "%s",
+		 riscv_gpr_names[EXTRACT_OPERAND (RS3, l)]);
 	  break;
 
 	case 'u':
@@ -538,6 +584,10 @@ print_insn_args (const char *oparg, insn_t l, bfd_vma pc, disassemble_info *info
 		     riscv_rm, ARRAY_SIZE (riscv_rm));
 	  break;
 
+        case 'l':
+	  print (info->stream, dis_style_immediate, "%d", (int)EXTRACT_ITYPE_IMM6L (l));
+	  break;
+
 	case 'P':
 	  arg_print (info, EXTRACT_OPERAND (PRED, l),
 		     riscv_pred_succ, ARRAY_SIZE (riscv_pred_succ));
@@ -547,6 +597,36 @@ print_insn_args (const char *oparg, insn_t l, bfd_vma pc, disassemble_info *info
 	  arg_print (info, EXTRACT_OPERAND (SUCC, l),
 		     riscv_pred_succ, ARRAY_SIZE (riscv_pred_succ));
 	  break;
+
+        case 'n':
+        {
+          oparg++;
+          char field_name[RVP_MAX_KEYWORD_LEN];
+          if (parse_rvp_field (&oparg, field_name))
+          {
+          if (strcmp (field_name, "nds_rdp") == 0)
+            print (info->stream, dis_style_register, "%s", riscv_gpr_names[rd]);
+          else if (strcmp (field_name, "nds_rsp") == 0)
+            print (info->stream, dis_style_register, "%s", riscv_gpr_names[rs1]);
+          else if (strcmp (field_name, "nds_rtp") == 0)
+            print (info->stream, dis_style_register, "%s",
+                   riscv_gpr_names[EXTRACT_OPERAND (RS2, l)]);
+          else if (strcmp (field_name, "nds_i3u") == 0)
+            print (info->stream, dis_style_immediate, "%d", (int)EXTRACT_PTYPE_IMM3U (l));
+          else if (strcmp (field_name, "nds_i4u") == 0)
+            print (info->stream, dis_style_immediate, "%d", (int)EXTRACT_PTYPE_IMM4U (l));
+          else if (strcmp (field_name, "nds_i5u") == 0)
+            print (info->stream, dis_style_immediate, "%d", (int)EXTRACT_PTYPE_IMM5U (l));
+          else if (strcmp (field_name, "nds_i6u") == 0)
+            print (info->stream, dis_style_immediate, "%d", (int)EXTRACT_PTYPE_IMM6U (l));
+          else
+            print (info->stream, dis_style_text,
+                 _("# internal error, undefined nds v5 field (%s)"),
+                   field_name);
+            }
+          oparg--;
+        }
+        break;
 
 	case 'o':
 	  maybe_print_address (pd, rs1, EXTRACT_ITYPE_IMM (l), 0);
@@ -985,7 +1065,7 @@ riscv_disassemble_insn (bfd_vma memaddr,
 	  /* It's a match.  */
 	  (*info->fprintf_styled_func) (info->stream, dis_style_mnemonic,
 					"%s", op->name);
-	  print_insn_args (op->args, word, memaddr, info);
+	  print_insn_args (op->args, op->name, word, memaddr, info);
 
 	  /* Try to disassemble multi-instruction addressing sequences.  */
 	  if (pd->to_print_addr)
@@ -1289,6 +1369,7 @@ riscv_disassemble_data (bfd_vma memaddr ATTRIBUTE_UNUSED,
 			disassemble_info *info)
 {
   info->display_endian = info->endian;
+  int i;
 
   switch (info->bytes_per_chunk)
     {
@@ -1335,7 +1416,21 @@ riscv_disassemble_data (bfd_vma memaddr ATTRIBUTE_UNUSED,
 	 (unsigned long long) data);
       break;
     default:
-      abort ();
+      /* Arbitrary data so just print the bits in the shape of an .<N>byte directive.  */
+      info->bytes_per_line = info->bytes_per_chunk;
+      (*info->fprintf_styled_func)
+	(info->stream, dis_style_assembler_directive, ".%dbyte", info->bytes_per_chunk);
+      (*info->fprintf_styled_func) (info->stream, dis_style_text, "\t");
+      (*info->fprintf_styled_func) (info->stream, dis_style_immediate, "0x");
+      for (i = info->bytes_per_line; i > 0;)
+	{
+	  i--;
+	  data = bfd_get_bits (packet + i, 8, false);
+	  (*info->fprintf_styled_func)
+	    (info->stream, dis_style_immediate, "%02x",
+	      (unsigned) data);
+	}
+      break;
     }
   return info->bytes_per_chunk;
 }

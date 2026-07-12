@@ -59,6 +59,8 @@ static inline unsigned int riscv_insn_length (insn_t insn)
 
 #define EXTRACT_ITYPE_IMM(x) \
   (RV_X(x, 20, 12) | (RV_IMM_SIGN(x) << 12))
+#define EXTRACT_ITYPE_IMM6L(x) \
+  (RV_X(x, 20, 6))
 #define EXTRACT_STYPE_IMM(x) \
   (RV_X(x, 7, 5) | (RV_X(x, 25, 7) << 5) | (RV_IMM_SIGN(x) << 12))
 #define EXTRACT_BTYPE_IMM(x) \
@@ -97,6 +99,14 @@ static inline unsigned int riscv_insn_length (insn_t insn)
   ((RV_X(x, 3, 2) << 1) | (RV_X(x, 10, 2) << 3) | (RV_X(x, 2, 1) << 5) | (RV_X(x, 5, 2) << 6) | (-RV_X(x, 12, 1) << 8))
 #define EXTRACT_CJTYPE_IMM(x) \
   ((RV_X(x, 3, 3) << 1) | (RV_X(x, 11, 1) << 4) | (RV_X(x, 2, 1) << 5) | (RV_X(x, 7, 1) << 6) | (RV_X(x, 6, 1) << 7) | (RV_X(x, 9, 2) << 8) | (RV_X(x, 8, 1) << 10) | (-RV_X(x, 12, 1) << 11))
+#define EXTRACT_PTYPE_IMM3U(x) \
+  (RV_X(x, 20, 3))
+#define EXTRACT_PTYPE_IMM4U(x) \
+  (RV_X(x, 20, 4))
+#define EXTRACT_PTYPE_IMM5U(x) \
+  (RV_X(x, 20, 5))
+#define EXTRACT_PTYPE_IMM6U(x) \
+  (RV_X(x, 20, 6))
 #define EXTRACT_RVV_VI_IMM(x) \
   (RV_X(x, 15, 5) | (-RV_X(x, 19, 1) << 5))
 #define EXTRACT_RVV_VI_UIMM(x) \
@@ -173,6 +183,16 @@ static inline unsigned int riscv_insn_length (insn_t insn)
   ((RV_X(x, 1, 2) << 3) | (RV_X(x, 3, 2) << 10) | (RV_X(x, 5, 1) << 2) | (RV_X(x, 6, 2) << 5) | (RV_X(x, 8, 1) << 12))
 #define ENCODE_CJTYPE_IMM(x) \
   ((RV_X(x, 1, 3) << 3) | (RV_X(x, 4, 1) << 11) | (RV_X(x, 5, 1) << 2) | (RV_X(x, 6, 1) << 7) | (RV_X(x, 7, 1) << 6) | (RV_X(x, 8, 2) << 9) | (RV_X(x, 10, 1) << 8) | (RV_X(x, 11, 1) << 12))
+#define ENCODE_PTYPE_IMM3U(x) \
+  (RV_X(x, 0, 3) << 20)
+#define ENCODE_PTYPE_IMM4U(x) \
+  (RV_X(x, 0, 4) << 20)
+#define ENCODE_PTYPE_IMM5U(x) \
+  (RV_X(x, 0, 5) << 20)
+#define ENCODE_PTYPE_IMM6U(x) \
+  (RV_X(x, 0, 6) << 20)
+#define ENCODE_ITYPE_IMM6L(x) \
+  (RV_X(x, 0, 6) << 20)
 #define ENCODE_RVV_VB_IMM(x) \
   (RV_X(x, 0, 10) << 20)
 #define ENCODE_RVV_VC_IMM(x) \
@@ -228,6 +248,10 @@ static inline unsigned int riscv_insn_length (insn_t insn)
 #define VALID_ZCB_BYTE_UIMM(x) (EXTRACT_ZCB_BYTE_UIMM(ENCODE_ZCB_BYTE_UIMM(x)) == (x))
 #define VALID_ZCB_HALFWORD_UIMM(x) (EXTRACT_ZCB_HALFWORD_UIMM(ENCODE_ZCB_HALFWORD_UIMM(x)) == (x))
 #define VALID_ZCMP_SPIMM(x) (EXTRACT_ZCMP_SPIMM(ENCODE_ZCMP_SPIMM(x)) == (x))
+#define VALID_PTYPE_IMM3U(x) (EXTRACT_PTYPE_IMM3U(ENCODE_PTYPE_IMM3U(x)) == (x))
+#define VALID_PTYPE_IMM4U(x) (EXTRACT_PTYPE_IMM4U(ENCODE_PTYPE_IMM4U(x)) == (x))
+#define VALID_PTYPE_IMM5U(x) (EXTRACT_PTYPE_IMM5U(ENCODE_PTYPE_IMM5U(x)) == (x))
+#define VALID_PTYPE_IMM6U(x) (EXTRACT_PTYPE_IMM6U(ENCODE_PTYPE_IMM6U(x)) == (x))
 
 #define RISCV_RTYPE(insn, rd, rs1, rs2) \
   ((MATCH_ ## insn) | ((rd) << OP_SH_RD) | ((rs1) << OP_SH_RS1) | ((rs2) << OP_SH_RS2))
@@ -293,6 +317,14 @@ static inline unsigned int riscv_insn_length (insn_t insn)
 #define OP_MASK_RL		0x1
 #define OP_SH_RL		25
 
+/* ZC Specific */
+#define OP_MASK_RLIST		0xf
+#define OP_SH_RLIST		4
+#define OP_MASK_SREG1		0x7
+#define OP_SH_SREG1		7
+#define OP_MASK_SREG2		0x7
+#define OP_SH_SREG2		2
+
 #define OP_MASK_CSR		0xfffU
 #define OP_SH_CSR		20
 
@@ -339,6 +371,10 @@ static inline unsigned int riscv_insn_length (insn_t insn)
 #define OP_SH_VS1		15
 #define OP_MASK_VS2		0x1f
 #define OP_SH_VS2		20
+#define OP_MASK_VCRS2   0x1f
+#define OP_SH_VCRS2     2
+#define OP_MASK_VS3     0x1fU
+#define OP_SH_VS3       27
 #define OP_MASK_VIMM		0x1f
 #define OP_SH_VIMM		15
 #define OP_MASK_VMASK		0x1
@@ -434,6 +470,16 @@ static inline unsigned int riscv_insn_length (insn_t insn)
 #define EXTRACT_S_IMM(n, s, l) \
   RV_X_SIGNED (l, s, n)
 
+/* Zcb extenison.  */
+#define ENCODE_ZCB_BYTE_UIMM(x) \
+  ((RV_X(x, 0, 1) << 6) | (RV_X(x, 1, 1) << 5))
+#define ENCODE_ZCB_HALFWORD_UIMM(x) \
+  (RV_X(x, 1, 1) << 5)
+#define ENCODE_ZCMP_SPIMM(x) \
+  (RV_X(x, 4, 2) << 2)
+#define ENCODE_ZCMP_TABLE_JUMP_INDEX(x) \
+  (RV_X(x, 0, 8) << 2)
+
 /* Validate that unsigned n-bit immediate is within bounds.  */
 #define VALIDATE_U_IMM(v, n) \
   ((unsigned long) v < (1UL << n))
@@ -444,6 +490,10 @@ static inline unsigned int riscv_insn_length (insn_t insn)
 
 /* The maximal number of subset can be required.  */
 #define MAX_SUBSET_NUM 4
+
+#define RISCV_SREG_0_7(REGNO) \
+    ((REGNO == X_S0 || REGNO == X_S1) \
+     || (REGNO >= X_S2 && REGNO <= X_S7))
 
 /* The range of sregs.  */
 #define RISCV_SREG_0_7(REGNO) \
@@ -561,6 +611,9 @@ enum riscv_insn_class
   INSN_CLASS_XSFVQMACCQOQ,
   INSN_CLASS_XSFVQMACCDOD,
   INSN_CLASS_XSFVFNRCLIPXFQF,
+  INSN_CLASS_ZPN,
+  INSN_CLASS_ZBPBO,
+  INSN_CLASS_ZPSFOPERAND,
 };
 
 /* This structure holds information for a particular instruction.  */
