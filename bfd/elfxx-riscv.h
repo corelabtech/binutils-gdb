@@ -149,4 +149,6 @@ extern bool
 _bfd_riscv_elf_merge_gnu_properties (struct bfd_link_info *, bfd *,
 				     elf_property *, elf_property *, uint32_t);
 
+extern int
+riscv_get_base_spimm (insn_t, riscv_parse_subset_t *);
 #define elf_backend_parse_gnu_properties _bfd_riscv_elf_parse_gnu_properties
